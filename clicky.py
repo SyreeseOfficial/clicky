@@ -78,7 +78,9 @@ def check_backend():
 def make_device():
     from evdev import UInput, ecodes as e
     # both buttons declared: Wayland ignores devices without them
-    return UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT]}, name="clicky")
+    # REL axes make libinput/SDL classify it as a real mouse, not a button-only device
+    return UInput({e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT],
+                   e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL]}, name="clicky")
 
 
 def click(ui, btn):
@@ -86,6 +88,7 @@ def click(ui, btn):
     code = e.BTN_LEFT if btn == "left" else e.BTN_RIGHT
     ui.write(e.EV_KEY, code, 1)
     ui.syn()
+    time.sleep(0.1)  # laggy games (SDV + mods) miss short presses; 40ms was too short
     ui.write(e.EV_KEY, code, 0)
     ui.syn()
 
@@ -108,8 +111,14 @@ def start(cfg):
             print(f"\rStarting in {n}s (Ctrl+C to cancel) ", end="", flush=True)
             time.sleep(1)
         print("\r" + " " * 40 + "\r", end="")
+        from evdev import ecodes as e
         ui = make_device()
         time.sleep(0.3)  # let the compositor pick up the new device
+        # nudge the pointer: games under XWayland only get clicks after a pointer-enter/motion event
+        for dx in (2, -2):
+            ui.write(e.EV_REL, e.REL_X, dx)
+            ui.syn()
+            time.sleep(0.05)
         t0 = time.monotonic()
         while True:
             click(ui, cfg["button"])

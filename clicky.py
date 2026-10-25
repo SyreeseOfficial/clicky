@@ -93,6 +93,10 @@ def click(ui, btn):
     ui.syn()
 
 
+def c(code, text):  # ANSI color; plain when piped
+    return f"\033[{code}m{text}\033[0m" if sys.stdout.isatty() else text
+
+
 def hms(s):
     s = int(s)
     return f"{s // 3600:02d}:{s % 3600 // 60:02d}:{s % 60:02d}"
@@ -101,14 +105,14 @@ def hms(s):
 def start(cfg):
     err = check_backend()
     if err:
-        print(f"{err} Run 3 Setup (then log out/in if it adds you to the input group).")
+        print(c("1;31", err) + c("33", " Run 3 Setup (then log out/in if it adds you to the input group)."))
         return
     ui = None
     clicks = 0
     t0 = time.monotonic()
     try:
         for n in range(cfg["start_delay_s"], 0, -1):
-            print(f"\rStarting in {n}s (Ctrl+C to cancel) ", end="", flush=True)
+            print("\r" + c("1;33", f"Starting in {n}s") + c("2", " (Ctrl+C to cancel) "), end="", flush=True)
             time.sleep(1)
         print("\r" + " " * 40 + "\r", end="")
         from evdev import ecodes as e
@@ -124,7 +128,7 @@ def start(cfg):
             click(ui, cfg["button"])
             clicks += 1
             elapsed = time.monotonic() - t0
-            print(f"\rclicks: {clicks}  elapsed: {hms(elapsed)}", end="", flush=True)
+            print(f"\r{c('36', 'clicks:')} {c('1;32', clicks)}  {c('36', 'elapsed:')} {c('1;35', hms(elapsed))}", end="", flush=True)
             if limit_hit(cfg, clicks, elapsed):
                 break
             time.sleep(next_delay(cfg))
@@ -136,7 +140,7 @@ def start(cfg):
             ui.write(e.EV_KEY, e.BTN_LEFT if cfg["button"] == "left" else e.BTN_RIGHT, 0)
             ui.syn()
             ui.close()
-        print(f"\nStopped. clicks: {clicks}  elapsed: {hms(time.monotonic() - t0)}")
+        print(f"\n{c('1;31', 'Stopped.')} {c('36', 'clicks:')} {c('1;32', clicks)}  {c('36', 'elapsed:')} {c('1;35', hms(time.monotonic() - t0))}")
 
 
 SETTINGS = [  # key, label, validator
@@ -151,12 +155,12 @@ SETTINGS = [  # key, label, validator
 
 def settings(cfg):
     for i, (k, label, _) in enumerate(SETTINGS, 1):
-        print(f"  {i} {label}: {cfg[k]}")
+        print(f"  {c('1;33', i)} {label}: {c('1;32', cfg[k])}")
     pick = input("Change which (Enter = back)? ").strip()
     if not pick:
         return
     if not (pick.isdigit() and 1 <= int(pick) <= len(SETTINGS)):
-        print("Invalid choice.")
+        print(c("1;31", "Invalid choice."))
         return
     k, label, ok = SETTINGS[int(pick) - 1]
     raw = input(f"New {label}: ").strip()
@@ -164,15 +168,15 @@ def settings(cfg):
         if not ok(raw):
             raise ValueError
     except ValueError:
-        print("Invalid value.")
+        print(c("1;31", "Invalid value."))
         return
     cfg[k] = raw if k == "button" else int(raw)
     save(cfg)
-    print("Saved.")
+    print(c("1;32", "Saved."))
 
 
 def sh(cmd, **kw):
-    print("$ " + " ".join(cmd))
+    print(c("2;36", "$ " + " ".join(cmd)))
     return subprocess.run(cmd, **kw).returncode == 0
 
 
@@ -208,9 +212,9 @@ def setup():
         else:
             ok = sh(s)
         if not ok:
-            print("Failed: " + " ".join(s[:3] if isinstance(s, tuple) else s))
+            print(c("1;31", "Failed: " + " ".join(s[:3] if isinstance(s, tuple) else s)))
             return
-    print("Log out and back in for the input group to apply.")
+    print(c("1;33", "Log out and back in for the input group to apply."))
 
 
 def main():
@@ -219,17 +223,17 @@ def main():
     cfg = load()
     while True:
         try:
-            c = input("\n1 Start  2 Settings  3 Setup  4 Quit\n> ").strip()
+            choice = input("\n" + "  ".join(c("1;33", n) + " " + c("1;36", t) for n, t in (("1", "Start"), ("2", "Settings"), ("3", "Setup"), ("4", "Quit"))) + "\n" + c("1;32", "> ")).strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        if c == "1":
+        if choice == "1":
             start(cfg)
-        elif c == "2":
+        elif choice == "2":
             settings(cfg)
-        elif c == "3":
+        elif choice == "3":
             setup()
-        elif c == "4":
+        elif choice == "4":
             return
 
 

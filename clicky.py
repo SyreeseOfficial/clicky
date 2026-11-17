@@ -10,7 +10,7 @@ import tempfile
 import time
 
 DEFAULTS = {"interval_ms": 100, "button": "left", "start_delay_s": 5,
-            "jitter_pct": 0, "max_duration_s": 0, "max_clicks": 0}
+            "jitter_pct": 0, "max_duration_s": 0, "max_clicks": 0, "theme": "default"}
 CONFIG_PATH = os.path.expanduser("~/.config/clicky/config.json")
 UDEV_RULE = "/etc/udev/rules.d/99-uinput.rules"
 UDEV_LINE = 'KERNEL=="uinput", GROUP="input", MODE="0660"'
@@ -93,7 +93,19 @@ def click(ui, btn):
     ui.syn()
 
 
+# Call sites use the default theme's codes as roles; other themes remap them.
+THEMES = {
+    "default": {},
+    "ocean": {"1;31": "1;91", "33": "34", "1;33": "1;94", "1;32": "1;96", "36": "34", "1;35": "1;34", "1;36": "1;94", "2;36": "2;34"},
+    "forest": {"1;31": "1;91", "33": "32", "1;33": "1;92", "1;32": "1;32", "36": "32", "1;35": "1;33", "1;36": "1;32", "2;36": "2;32"},
+    "sunset": {"1;31": "1;91", "33": "93", "1;33": "1;93", "1;32": "1;95", "36": "91", "1;35": "1;33", "1;36": "1;91", "2;36": "2;31"},
+    "mono": {k: "1" if k.startswith("1") else "0" for k in ("1;31", "33", "1;33", "1;32", "36", "1;35", "1;36", "2;36")},
+}
+theme = "default"
+
+
 def c(code, text):  # ANSI color; plain when piped
+    code = THEMES.get(theme, {}).get(code, code)
     return f"\033[{code}m{text}\033[0m" if sys.stdout.isatty() else text
 
 
@@ -150,6 +162,7 @@ SETTINGS = [  # key, label, validator
     ("jitter_pct", "Jitter (%, 0-100)", lambda v: 0 <= int(v) <= 100),
     ("max_duration_s", "Max duration (s, 0 = none)", lambda v: int(v) >= 0),
     ("max_clicks", "Max clicks (0 = none)", lambda v: int(v) >= 0),
+    ("theme", "Theme (" + "/".join(THEMES) + ")", lambda v: v in THEMES),
 ]
 
 
@@ -170,7 +183,9 @@ def settings(cfg):
     except ValueError:
         print(c("1;31", "Invalid value."))
         return
-    cfg[k] = raw if k == "button" else int(raw)
+    cfg[k] = raw if k in ("button", "theme") else int(raw)
+    global theme
+    theme = cfg["theme"]
     save(cfg)
     print(c("1;32", "Saved."))
 
@@ -221,6 +236,8 @@ def main():
     if "--selftest" in sys.argv:
         return selftest()
     cfg = load()
+    global theme
+    theme = cfg["theme"]
     while True:
         try:
             choice = input("\n" + "  ".join(c("1;33", n) + " " + c("1;36", t) for n, t in (("1", "Start"), ("2", "Settings"), ("3", "Setup"), ("4", "Quit"))) + "\n" + c("1;32", "> ")).strip()
